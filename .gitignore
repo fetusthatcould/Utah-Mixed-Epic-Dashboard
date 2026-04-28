@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+
+# Environment variables (CRITICAL: Do not leak your UGRC key!)
+.env
+.env.local
+.env.development.local
+
+# Python Pipeline
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# Large Data Files (Keep your NLCD .tiff and GPX files out of Git)
+*.tiff
+*.tif
+*.gpx
+/data-pipeline/data/*
+
+# .NET / API
+bin/
+obj/
+*.user
+*.suo
+*.shellcfg
+
+# SQL Queries
+SQL Queries/
+
+# IDE
+.vs/
+.vscode/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Docker
+docker-compose.override.yml
