@@ -36,6 +36,9 @@ obj/
 # SQL Queries
 SQL Queries/
 
+# Cache
+cache/
+
 # IDE
 .vs/
 .vscode/
