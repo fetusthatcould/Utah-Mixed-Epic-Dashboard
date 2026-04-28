@@ -1,122 +1,65 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+import MapViewer from './components/MapViewer';
+//import StatsPanel from './components/StatsPanel';
+//import ElevationProfile from './components/ElevationProfile';
+import './index.css';
 
-function App() {
-  const [count, setCount] = useState(0)
+// Ensure this matches your local .NET API port
+const API_URL = 'http://localhost:5117/api/Route/intelligence';
 
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+export interface RacePoint {
+  pointOrder: number;
+  elevationM: number;
+  slopePctSmooth: number;
+  techScore: number;
+  pathName: string;
+  roadType: number;
+  isSingletrack: boolean;
+  geoJson: string; // Stored as a string from PostGIS, needs parsing
 }
 
-export default App
+const App: React.FC = () => {
+  const [routeData, setRouteData] = useState<RacePoint[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    const fetchRoute = async () => {
+      try {
+        const response = await axios.get<RacePoint[]>(API_URL);
+        setRouteData(response.data);
+      } catch (error) {
+        console.error('Failed to fetch route data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRoute();
+  }, []);
+
+  if (loading) return <div className="loading">Loading Utah Mixed Epic Course Data...</div>;
+
+  return (
+    <div className="dashboard-container" style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#f4f4f9' }}>
+      <header style={{ padding: '15px 20px', background: '#1a1a1a', color: 'white' }}>
+        <h1 style={{ margin: 0, fontSize: '1.5rem' }}>Race Intelligence Dashboard</h1>
+      </header>
+      
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div style={{ flex: 3, position: 'relative' }}>
+          <MapViewer data={routeData} hoveredIndex={hoveredIndex} />
+        </div>
+        <div style={{ flex: 1, minWidth: '300px', borderLeft: '2px solid #ddd' }}>
+         {/* <StatsPanel data={routeData} /> */}
+        </div>
+      </div>
+
+      <div style={{ height: '250px', borderTop: '2px solid #ddd', background: 'white' }}>
+        {/* <ElevationProfile data={routeData} onHover={setHoveredIndex} /> */}
+      </div>
+    </div>
+  );
+};
+
+export default App;

@@ -8,21 +8,21 @@ builder.Services.AddControllers();
 
 
 // --- ADD CORS POLICY ---
-builder.Services.AddCors(options => {
-    options.AddPolicy("AllowDashboard", policy => {
-        policy.WithOrigins("http://localhost:5173") // Vite's default port
-              .AllowAnyHeader()
-              .AllowAnyMethod();
-    });
-});
-
-// builder.Services.AddCors(options =>
-// {
-//     options.AddPolicy("AllowAll", policy =>
-//     {
-//         policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+// builder.Services.AddCors(options => {
+//     options.AddPolicy("AllowDashboard", policy => {
+//         policy.WithOrigins("http://localhost:5173") // Vite's default port
+//               .AllowAnyHeader()
+//               .AllowAnyMethod();
 //     });
 // });
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+    });
+});
 
 // 1. Add the service
 builder.Services.AddResponseCompression(options =>
