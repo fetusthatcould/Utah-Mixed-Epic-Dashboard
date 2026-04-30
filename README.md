@@ -1,51 +1,153 @@
-Utah Mixed Epic (UME) - Route Intelligence Dashboard
+# UME Dashboard
 
-Overview
+This repository contains the full Utah Mixed Epic (UME) Dashboard application, including:
 
-The Utah Mixed Epic (UME) Route Intelligence Dashboard is a geospatial web app that helps analyze, visualize, and improve bikepacking route data. Made for ultra-endurance cycling, it goes further than basic GPX line rendering by adding more route detail and calculating a custom Technicality Score using elevation changes, land cover, and official road and trail surface types.
+- `data-pipeline/` — Python-based data ingestion and enrichment pipeline
+- `api/src/` — ASP.NET Core Web API that serves route intelligence data
+- `frontend/` — React + TypeScript + Vite user interface
 
-Technical Architecture
+## Overview
 
-This repository has three main parts: a Python spatial data pipeline, a .NET REST API, and a React frontend that uses MapLibre GL.
+The application pipeline is designed to:
 
-1. Geospatial Data Pipeline (Python / PostGIS)
+1. Ingest raw GPX route data and spatial reference layers.
+2. Store route and reference data in PostGIS.
+3. Densify the route into fixed-interval points.
+4. Enrich those points with elevation, land cover, trail, and road attributes.
+5. Expose the resulting dataset through an API.
+6. Render the enriched route data in a frontend map UI.
 
-The data pipeline takes raw GPX data and turns it into detailed, useful points.
+## Repository layout
 
-* CRS Enforcement and Densification: Raw routes are converted to EPSG:26912 (NAD83 / UTM Zone 12N) so that all distance and slope calculations use metric units. The route is then split into points every 100 meters.
-* USGS Elevation Integration: Elevation data is collected using the py3dep library with the USGS 3D Elevation Program (3DEP). Slope is calculated and then smoothed with a 5-point rolling average to reduce GPS noise.
-* UGRC / SGID Integration: The pipeline uses the Utah Geospatial Resource Center (UGRC) State Geographic Information Datasource (SGID). It matches route points to sgid_roads and sgid_trails within 25 meters to get trail names and CARTOCODE surface types.
-* NLCD Land Cover: If a point is not on a mapped trail, the pipeline uses local National Land Cover Database (NLCD) data to provide surface types like Barren or Shrub/Scrub.
-* Technicality Scoring: A proprietary difficulty score (1-10) is assigned to each 100m segment by interpolating the smoothed slope percentage and applying multipliers based on the SGID surface data, allowing the system to accurately identify high-fatigue "hike-a-bike" sectors.
+- `data-pipeline/`
+  - `ingest_route.py` — loads GPX route points into PostGIS and imports SGID road/trail reference layers.
+  - `densify_and_enrich.py` — interpolates points along the route, fetches elevation, and applies enrichment.
+  - `requirements.txt` — Python dependencies for the pipeline.
+  - `data/` — local data storage for large files (ignored by git).
 
-2. Backend API (.NET 8)
+- `api/src/`
+  - `Program.cs` — ASP.NET Core app setup, including CORS and Swagger.
+  - `Controllers/RouteController.cs` — exposes route intelligence at `GET /api/route/intelligence`.
+  - `Models/RacePoint.cs` — response model for the frontend.
+  - `appsettings.json` / `appsettings.Development.json` — API configuration.
 
-The backend provides a fast, lightweight interface to serve the enriched route data to the client.
+- `frontend/`
+  - `package.json` — frontend dependencies and scripts.
+  - `src/` — React application source.
+  - `public/` — static assets.
+  - `README.md` — frontend-specific documentation.
 
-* Framework: Built on ASP.NET Core with Swagger/OpenAPI support for documentation and testing.
-* Performance: Gzip Response Compression is used to send large GeoJSON files quickly over the network.
-* Configuration: A permissive CORS policy (AllowAll) is set up to make local development easy.
+## Environment variables
 
-3. Frontend Visualization (React / MapLibre GL)
+The pipeline and API both rely on environment configuration. Create a `.env` file in the repository root or the appropriate working directory with values like:
 
-The client-side app shows the intelligence data for users to analyze.
+```env
+DATABASE_URL=postgresql://user:password@host:port/database
+GPX_ROUTE_PATH=path/to/route.gpx
+NLCD_RASTER_PATH=path/to/nlcd_raster.tiff
+```
 
-* UGRC Discover Base Maps: The map viewer connects to the UGRC Discover API (discover.agrc.utah.gov) and uses high-quality state topographic raster tiles as the base map.
-* Dynamic Route Rendering: The app uses MapLibre GL to draw the densified route. It goes through the coordinates to create a connected LineString FeatureCollection.
-* Data-Driven Styling: The route uses data-driven styling, showing a color gradient from green to dark red based on each segment's techScore. This gives users instant visual feedback on route difficulty.
+### Required variables
 
-Environment Setup
+- `DATABASE_URL` — PostGIS connection string used by the Python pipeline.
+- `GPX_ROUTE_PATH` — path to the GPX file to ingest.
+- `NLCD_RASTER_PATH` — path to the NLCD raster file for land cover lookup.
 
-Database Configuration
+## Data pipeline
 
-The data pipeline needs a running PostGIS instance. Set up a .env file in the /data-pipeline directory with these variables:
+### Install dependencies
 
-* DATABASE_URL: Connection string for the PostGIS database.
-* GPX_ROUTE_PATH: Local path to the raw input GPX file.
-* NLCD_RASTER_PATH: Local path to the NLCD GeoTIFF file.
+From the repository root:
 
-Running the Application
+```bash
+python -m pip install -r data-pipeline/requirements.txt
+```
 
-1. Database Enrichment: Run the pipeline to densify the route and send it to PostGIS. Use: python data-pipeline/densify_and_enrich.py
-2. API: Start the .NET server from the /api/src directory with: dotnet run
-3. Frontend: Install dependencies and start the Vite development server from the /frontend directory using: npm install && npm run dev
+### Run the pipeline
+
+1. Ingest the GPX route and SGID reference layers:
+
+```bash
+python data-pipeline/ingest_route.py
+```
+
+2. Densify and enrich the route points:
+
+```bash
+python data-pipeline/densify_and_enrich.py
+```
+
+The pipeline expects a PostGIS-enabled database and will load intermediate tables such as `raw_route_points` and reference layers.
+
+## API
+
+### Run the API
+
+From the repository root:
+
+```bash
+cd api/src
+dotnet run
+```
+
+The API is configured with a permissive CORS policy in `Program.cs` and exposes Swagger in development.
+
+### Endpoint
+
+- `GET /api/route/intelligence`
+
+This endpoint returns enriched route points from the `v_ui_route_layer` database view, including fields such as:
+
+- `PointOrder`
+- `ElevationM`
+- `SlopePctSmooth`
+- `TechScore`
+- `LandCoverType`
+- `CumulativeFatigueIndex`
+- `FoodScore`
+- `WaterScore`
+- `RoadSurface`
+- `TrailName`
+- `IsSingletrack`
+- `GeoJson`
+
+## Frontend
+
+### Install dependencies
+
+From the `frontend` folder:
+
+```bash
+cd frontend
+npm install
+```
+
+### Run locally
+
+```bash
+npm run dev
+```
+
+### Build
+
+```bash
+npm run build
+```
+
+### Preview production build
+
+```bash
+npm run preview
+```
+
+## Notes
+
+- Large data files are intentionally ignored from git.
+- The frontend reads enriched route geometry from the API.
+- The API is designed to serve a PostGIS-backed route intelligence dataset.
+
+## Additional resources
+
+- `frontend/README.md` — frontend-specific setup and notes.
+- `data-pipeline/requirements.txt` — pipeline dependency list.
+- `api/src/Ume.Intelligence.Api.csproj` — backend project definition.
