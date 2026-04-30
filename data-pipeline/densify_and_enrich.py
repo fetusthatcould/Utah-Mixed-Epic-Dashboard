@@ -24,20 +24,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- CONFIGURATION ---
-# --- CONFIGURATION ---
-# The second argument in os.getenv serves as a fallback/default if the variable isn't found
-DB_URL = os.getenv("DATABASE_URL")
-if not DB_URL:
-    raise ValueError("DATABASE_URL environment variable is not set.")
-
-engine = create_engine(DB_URL)
-
 CONFIG = {
+    "DB_URL": os.getenv("DATABASE_URL"), # <-- We just needed to add this back!
     "SNAPPING_DISTANCE": 25,
+    "STEP_METERS": 100,
+    "BATCH_SIZE": 5000,
     "NLCD_PATH": os.getenv("NLCD_RASTER_PATH"),
     "GPX_PATH": os.getenv("GPX_ROUTE_PATH")
 }
 
+# Optional safety check right after loading:
+if not CONFIG["DB_URL"]:
+    raise ValueError("DATABASE_URL environment variable is not set. Check your .env file!")
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
