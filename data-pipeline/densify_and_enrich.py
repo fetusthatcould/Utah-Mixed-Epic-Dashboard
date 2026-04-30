@@ -14,14 +14,28 @@ import py3dep
 import rasterio
 import logging
 from typing import Optional, List, Tuple
+import os
+from dotenv import load_dotenv
+
+
+
+
+# Load environment variables
+load_dotenv()
 
 # --- CONFIGURATION ---
+# --- CONFIGURATION ---
+# The second argument in os.getenv serves as a fallback/default if the variable isn't found
+DB_URL = os.getenv("DATABASE_URL")
+if not DB_URL:
+    raise ValueError("DATABASE_URL environment variable is not set.")
+
+engine = create_engine(DB_URL)
+
 CONFIG = {
-    "DB_URL": "postgresql://postgres:geospatial@localhost:5432/ume_db",
-    "NLCD_PATH": r"ume-gis-dashboard\data\Annual_NLCD_LndCov_2024_CU_C1V1_03aeeaf5-16c8-44eb-88e8-1bd94bd97738.tiff",
-    "STEP_METERS": 100,
-    "BATCH_SIZE": 5000,
-    "SNAPPING_DISTANCE": 25,  # Meters to search for nearest road/trail
+    "SNAPPING_DISTANCE": 25,
+    "NLCD_PATH": os.getenv("NLCD_RASTER_PATH"),
+    "GPX_PATH": os.getenv("GPX_ROUTE_PATH")
 }
 
 # Setup logging
@@ -34,37 +48,46 @@ def get_engine() -> Engine:
 def densify_route(engine: Engine, step_meters: int = 100) -> Optional[gpd.GeoDataFrame]:
     """
     Interpolates points along the raw route at fixed intervals.
-    
-    Args:
-        engine: PostGIS connection engine.
-        step_meters: Distance between points in meters.
-        
-    Returns:
-        GeoDataFrame of points or None if no route is found.
+    Enforces a projected CRS (UTM Zone 12N) to ensure distance calculations are in meters.
     """
     logging.info("Step 1: Loading raw route from database...")
     query = "SELECT * FROM raw_route"
+    
+    # read_postgis tries to infer CRS from the SRID in the geometry column
     gdf = gpd.read_postgis(query, engine, geom_col='geometry')
     
     if gdf.empty:
         logging.error("No routes found in 'raw_route' table.")
         return None
 
+    # --- CRS ENFORCEMENT PROTOCOL ---
+    # 1. Fallback: If PostGIS lost the SRID, assume standard GPS coordinates (WGS84)
+    if gdf.crs is None:
+        logging.warning("No CRS found on database records. Assuming EPSG:4326 (WGS84).")
+        gdf.set_crs(epsg=4326, inplace=True)
+        
+    # 2. Project: Force conversion to NAD83 / UTM Zone 12N (Utah's standard metric projection)
+    # This guarantees that .length and .interpolate() operate in strictly metric units
+    if gdf.crs.to_epsg() != 26912:
+        logging.info(f"Reprojecting route from {gdf.crs} to EPSG:26912.")
+        gdf = gdf.to_crs(epsg=26912)
+    # --------------------------------
+
     # Process the first LineString found
     line = gdf.geometry.iloc[0] 
     logging.info(f"Route length: {line.length:.0f} meters")
      
-    # Generate distances for interpolation
+    # Generate metric distances for interpolation
     distances = np.arange(0, line.length, step_meters)
     points = [line.interpolate(dist) for dist in distances]
     
     points_gdf = gpd.GeoDataFrame(
         {'point_order': range(len(points))}, 
         geometry=points, 
-        crs=gdf.crs
+        crs=gdf.crs  # Will now safely inherit EPSG:26912
     )
     
-    logging.info(f"Generated {len(points_gdf)} points.")
+    logging.info(f"Generated {len(points_gdf)} metric-spaced points.")
     return points_gdf
 
 def fetch_elevation(gdf: gpd.GeoDataFrame, batch_size: int = 5000) -> gpd.GeoDataFrame:
@@ -100,35 +123,51 @@ def fetch_elevation(gdf: gpd.GeoDataFrame, batch_size: int = 5000) -> gpd.GeoDat
 
 def fetch_sgid_data(gdf: gpd.GeoDataFrame, engine: Engine) -> gpd.GeoDataFrame:
     """
-    Spatial join against SGID (State Geographic Information Database) tables 
-    to identify road surfaces and trail names.
+    Spatial join against SGID tables to identify road surfaces and trail names.
+    Performs operations entirely in-memory using GeoPandas.
     """
-    logging.info("Step 5: Enriching with SGID Roads and Trails...")
+    logging.info("Step 5: Enriching with SGID Roads and Trails in memory...")
     
-    # Temp table for database-side spatial join
-    gdf.to_postgis("temp_points", engine, if_exists='replace', index=True)
+    # 1. Load the reference layers from PostGIS into memory
+    # (In a production app, you might cache these if running frequently)
+    sgid_roads = gpd.read_postgis("SELECT geometry, \"FULLNAME\", \"CARTOCODE\" FROM sgid_roads", engine, geom_col='geometry')
+    sgid_trails = gpd.read_postgis("SELECT geometry, \"PrimaryName\" FROM sgid_trails", engine, geom_col='geometry')
     
-    # Snap to nearest trail/road within the configured buffer (25m)
-    query = f"""
-    SELECT DISTINCT ON (p.point_order)
-        p.point_order,
-        COALESCE(t."PrimaryName", r."FULLNAME", 'Unmapped Connection') as trail_name,
-        r."CARTOCODE" as road_surface,
-        (t."PrimaryName" IS NOT NULL) as is_singletrack
-    FROM temp_points p
-    LEFT JOIN sgid_roads r ON ST_DWithin(p.geometry, r.geometry, {CONFIG['SNAPPING_DISTANCE']})
-    LEFT JOIN sgid_trails t ON ST_DWithin(p.geometry, t.geometry, {CONFIG['SNAPPING_DISTANCE']})
-    ORDER BY p.point_order, ST_Distance(p.geometry, t.geometry) ASC;
-    """
-    
-    sgid_df = pd.read_sql(query, engine)
-    gdf = gdf.merge(sgid_df, on='point_order', how='left')
-    
-    with engine.begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS temp_points;"))
-        
-    return gdf
+    # Ensure CRS matches before joining
+    sgid_roads = sgid_roads.to_crs(gdf.crs)
+    sgid_trails = sgid_trails.to_crs(gdf.crs)
 
+    # 2. Perform Nearest Spatial Joins (replacing ST_DWithin)
+    # sjoin_nearest automatically finds the closest feature within max_distance
+    trails_joined = gpd.sjoin_nearest(
+        gdf, 
+        sgid_trails, 
+        how="left", 
+        max_distance=CONFIG['SNAPPING_DISTANCE']
+    )
+    # sjoin_nearest can return multiple rows if features are perfectly equidistant. 
+    # Drop duplicates to maintain our original point count.
+    trails_joined = trails_joined[~trails_joined.index.duplicated(keep='first')]
+
+    roads_joined = gpd.sjoin_nearest(
+        gdf, 
+        sgid_roads, 
+        how="left", 
+        max_distance=CONFIG['SNAPPING_DISTANCE']
+    )
+    roads_joined = roads_joined[~roads_joined.index.duplicated(keep='first')]
+
+    # 3. Replicate the SQL COALESCE logic
+    # COALESCE(t."PrimaryName", r."FULLNAME", 'Unmapped Connection')
+    gdf['trail_name'] = trails_joined['PrimaryName'].combine_first(roads_joined['FULLNAME']).fillna('Unmapped Connection')
+    
+    # r."CARTOCODE" as road_surface
+    gdf['road_surface'] = roads_joined['CARTOCODE']
+    
+    # (t."PrimaryName" IS NOT NULL) as is_singletrack
+    gdf['is_singletrack'] = trails_joined['PrimaryName'].notna()
+    
+    return gdf
 def fetch_land_cover_local(gdf: gpd.GeoDataFrame, raster_path: str) -> gpd.GeoDataFrame:
     """
     Samples land cover data from a local NLCD GeoTIFF.

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import type { RacePoint } from '../App';
+import type { RacePoint } from '../types'; 
 
 interface MapViewerProps {
   data: RacePoint[];

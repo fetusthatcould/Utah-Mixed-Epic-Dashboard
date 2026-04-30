@@ -17,4 +17,5 @@ public class RacePoint
     // Adding Road surface type and trail names
     public string? RoadSurface { get; set; }
     public string? TrailName { get; set; }
+    public bool IsSingletrack { get; set; }
 }

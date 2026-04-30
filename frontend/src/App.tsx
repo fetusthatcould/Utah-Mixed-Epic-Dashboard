@@ -1,23 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import MapViewer from './components/MapViewer';
-//import StatsPanel from './components/StatsPanel';
+import StatsPanel  from './components/StatsPanel';
 //import ElevationProfile from './components/ElevationProfile';
+import type { RacePoint } from './types'; 
 import './index.css';
 
 // Ensure this matches your local .NET API port
 const API_URL = 'http://localhost:5117/api/Route/intelligence';
 
-export interface RacePoint {
-  pointOrder: number;
-  elevationM: number;
-  slopePctSmooth: number;
-  techScore: number;
-  pathName: string;
-  roadType: number;
-  isSingletrack: boolean;
-  geoJson: string; // Stored as a string from PostGIS, needs parsing
-}
 
 const App: React.FC = () => {
   const [routeData, setRouteData] = useState<RacePoint[]>([]);
@@ -51,7 +42,7 @@ const App: React.FC = () => {
           <MapViewer data={routeData} hoveredIndex={hoveredIndex} />
         </div>
         <div style={{ flex: 1, minWidth: '300px', borderLeft: '2px solid #ddd' }}>
-         {/* <StatsPanel data={routeData} /> */}
+         <StatsPanel data={routeData} />
         </div>
       </div>
 

@@ -23,20 +23,23 @@ public class RouteController : ControllerBase
         
         // We query your UI View v_ui_route_layer directly.
         // ST_AsGeoJSON converts the PostGIS geometry into a format Mapbox understands.
-        const string sql = @"
-           SELECT 
-            PointOrder,
-            ElevationM,
-            SlopePctSmooth,
-            TechScore,
-            LandCoverType,
-            CumulativeFatigueIndex,
-            FoodScore,
-            WaterScore,
-            ST_AsGeoJSON(geom_4326) as GeoJson
-        FROM v_ui_route_layer
-        ORDER BY PointOrder ASC
-       ";
+       const string sql = @"
+    SELECT 
+        PointOrder,
+        ElevationM,
+        SlopePctSmooth,
+        TechScore,
+        LandCoverType,
+        CumulativeFatigueIndex,
+        FoodScore,
+        WaterScore,
+        RoadSurface,
+        TrailName,
+        IsSingletrack,
+        ST_AsGeoJSON(geom_4326) as GeoJson
+    FROM v_ui_route_layer
+    ORDER BY PointOrder ASC
+";
 
         try
         {
