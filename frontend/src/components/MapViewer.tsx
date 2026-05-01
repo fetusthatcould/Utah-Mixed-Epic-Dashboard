@@ -8,7 +8,7 @@ interface MapViewerProps {
   hoveredIndex: number | null;
 }
 
-const UGRC_KEY = 'nerve-radar-lake-second';
+const UGRC_KEY = import.meta.env.VITE_UGRC_KEY;
 
 const MapViewer: React.FC<MapViewerProps> = ({ data, hoveredIndex }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
