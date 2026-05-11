@@ -34,7 +34,7 @@ jobs:
       # 3. Run the specific test file
       - name: Run Pytest
         run: |
-          cd data-pipeline
+          cd data-pipeline/tests
           pytest test_ingest_route.py -v
           pytest test_densify_and_enrich.py -v
 
