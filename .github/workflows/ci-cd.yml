@@ -34,9 +34,9 @@ jobs:
       # 3. Run the specific test file
       - name: Run Pytest
         run: |
-          cd data-pipeline/tests
-          pytest test_ingest_route.py -v
-          pytest test_densify_and_enrich.py -v
+          cd data-pipeline
+          python -m pytest tests/test_ingest_route.py -v
+          python -m pytest tests/test_densify_and_enrich.py -v
 
   # ---------------------------------------------------
   # JOB 2: Build and Deploy Container
