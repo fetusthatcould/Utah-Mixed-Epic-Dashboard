@@ -17,6 +17,12 @@ The application pipeline is designed to:
 5. Expose the resulting dataset through an API.
 6. Render the enriched route data in a frontend map UI.
 
+## Resource Highlights
+UGRC's Giza/WMTS tile services for high-performance shaded terrain (terrain_basemap).
+UGRC SGID ArcGIS REST API for dynamic, bounding-box queries of UtahRoads and TrailsAndPathways to accurately classify segments.
+
+
+
 ## Repository layout
 
 - `data-pipeline/`
