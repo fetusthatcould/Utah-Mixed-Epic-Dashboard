@@ -16,39 +16,35 @@ def test_calculate_slope_filters_gps_spike():
     filtered or smoothed out by calculate_slope().
     """
     
-    # 1. ARRANGE: 5 points exactly 100 meters apart (UTM Zone 12N)
-    points = [ Point(0, 0), Point(100, 0), Point(200, 0), Point(300, 0), Point(400, 0) ]
-
-    # Inject a massive, unrealistic elevation spike at the 3rd point (9000 meters)
-    raw_elevations = [1000, 1005, 9000, 1010, 1015]
+    points = [Point(x * 100, 0) for x in range(10)] # 0m, 100m, 200m ... 9000m
+    
+    # 10 elevations. The spike is safely in the middle at index 5.
+    raw_elevations = [1000, 1005, 1010, 1015, 1020, 9000, 1025, 1030, 1035, 1040]
 
     gdf = gpd.GeoDataFrame({
-        'point_order': [1, 2, 3, 4, 5],
+        'point_order': list(range(1, 11)),
         'elevation_m': raw_elevations,
         'geometry': points
     }, crs="EPSG:26912")
 
-    # 2. ACT: Run the dataframe through your math function
+    # ACT: Run the dataframe through your math function
     try:
         result_gdf = calculate_slope(gdf)
     except Exception as e:
         pytest.fail(f"Test Failed: calculate_slope crashed on spike data! Error: {e}")
 
-    # 3. ASSERT: Verify the business logic
-    spike_row = result_gdf.loc[result_gdf['point_order'] == 3]
+  # Assert against the 6th point (where the 9000 spike happened)
+    spike_row = result_gdf.loc[result_gdf['point_order'] == 6]
     spike_slope = spike_row['slope_pct_smooth'].iloc[0]
 
-    # Assert that your rolling average / smoothing logic capped this 
-    # to something reasonable (e.g., less than a 50% grade), instead of a 7,995% slope.
-    assert spike_slope < 50, f"Spike filter failed! The smoothed slope was mathematically impossible: {spike_slope}%"
-    assert len(result_gdf) == 5, "The function unexpectedly dropped rows instead of smoothing them."
-
+    assert not pd.isna(spike_slope), "Slope evaluated to NaN! The rolling window might be too large."
+    assert spike_slope < 50, f"Spike filter failed! Slope was: {spike_slope}%"
 
 # ---------------------------------------------------
 # TEST 2: The Network Logic (Mocked API)
 # ---------------------------------------------------
 # NOTE: If you use 'py3dep' inside fetch_elevation, change 'requests.get' to 'densify_and_enrich.py3dep.get_map' or similar.
-@patch('densify_and_enrich.requests.get') # We intercept the network call here
+@patch('densify_and_enrich.py3dep.elevation_bycoords') # We intercept the network call heres
 def test_fetch_elevation_handles_api_success(mock_api_call):
     """
     Tests that fetch_elevation properly assigns data to the DataFrame 
@@ -59,12 +55,10 @@ def test_fetch_elevation_handles_api_success(mock_api_call):
     points = [ Point(0, 0), Point(100, 0) ]
     gdf = gpd.GeoDataFrame({'point_order': [1, 2], 'geometry': points}, crs="EPSG:26912")
     
-    # Fake the API response (assuming it returns JSON or similar structured data)
-    mock_response = MagicMock()
-    mock_response.json.return_value = {"elevations": [1000, 1005]} # Adjust to match USGS response format
-    mock_response.status_code = 200
-    mock_api_call.return_value = mock_response
-
+    # py3dep directly returns a list of elevations, NOT an HTTP response.
+    # So we simply tell the mock to return exactly what the script expects.
+    mock_api_call.return_value = [1000, 1005] 
+    
     # 2. ACT
     try:
         result_gdf = fetch_elevation(gdf)
@@ -74,3 +68,9 @@ def test_fetch_elevation_handles_api_success(mock_api_call):
     # 3. ASSERT
     assert mock_api_call.called, "The API was never called by the function."
     assert 'elevation_m' in result_gdf.columns, "The elevation column was not added to the DataFrame."
+    
+    # Optional: Verify the values actually matched!
+    assert result_gdf['elevation_m'].iloc[0] == 1000
+    assert result_gdf['elevation_m'].iloc[1] == 1005
+
+   

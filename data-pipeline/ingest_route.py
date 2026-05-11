@@ -55,7 +55,7 @@ def ingest_sgid_layers(bbox_string):
     }
     
     headers = {'User-Agent': 'UME-Pipeline/1.0 (Interview-Prep)'}
-for table_name, base_url in layers.items():
+    for table_name, base_url in layers.items():
         print(f"Downloading {table_name} (Handling Pagination)...")
         
         all_features = []
@@ -93,10 +93,20 @@ for table_name, base_url in layers.items():
         # Parse the complete list of features directly into GeoPandas
         print(f"Building GeoDataFrame for {table_name} with {len(all_features)} total features...")
         gdf = gpd.GeoDataFrame.from_features(all_features)
-        
+
+        if gdf.empty:
+             # Defensively create the geometry column so to_crs() and to_postgis() don't crash
+            gdf = gpd.GeoDataFrame(columns=['geometry'], geometry='geometry', crs="EPSG:4326")
+        else:
+    # Only set crs if there is actual data
+            gdf = gdf.set_crs("EPSG:4326")
+
+        # Now this will safely work whether there are 1,000 roads or 0 roads
+            gdf = gdf.to_crs(epsg=26912)
+    
         # Explicitly set the incoming CRS (GeoJSON is always WGS84) and project
         gdf.set_crs(epsg=4326, inplace=True)
-        gdf = gdf.to_crs(epsg=26912)
+           
         
         # Push to PostGIS
         gdf.to_postgis(table_name, engine, if_exists='replace', index=True)
