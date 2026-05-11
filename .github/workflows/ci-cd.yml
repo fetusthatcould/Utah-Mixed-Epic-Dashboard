@@ -35,8 +35,8 @@ jobs:
       - name: Run Pytest
         run: |
           cd data-pipeline
-          python -m pytest tests/test_ingest_route.py -v
-          python -m pytest tests/test_densify_and_enrich.py -v
+          python -m pytest tests/ -v
+  
 
   # ---------------------------------------------------
   # JOB 2: Build and Deploy Container
